@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analizador de Informes AIEP - Modo Seguro</title>
+    <title>Analizador de Informes AIEP - Versión Estable</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -88,16 +88,17 @@
             font-family: 'Courier New', Courier, monospace;
             padding: 15px;
             border-radius: 5px;
-            height: 100px;
+            height: 120px;
             overflow-y: auto;
             margin-bottom: 20px;
             font-size: 0.85em;
             box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
         }
 
-        .terminal p { margin: 2px 0; }
+        .terminal p { margin: 2px 0; border-bottom: 1px solid #333; padding-bottom: 2px; }
         .log-error { color: #ff5252; }
         .log-warn { color: #ffeb3b; }
+        .log-success { color: #00e676; font-weight: bold; }
 
         .kpi-bar {
             display: flex;
@@ -177,6 +178,7 @@
 
         @media (max-width: 768px) {
             .input-grid { grid-template-columns: 1fr; }
+            .kpi-bar { flex-direction: column; align-items: center; gap: 10px; }
         }
     </style>
 </head>
@@ -247,6 +249,7 @@
         p.textContent = `> ${msg}`;
         if (type === 'error') p.className = 'log-error';
         if (type === 'warn') p.className = 'log-warn';
+        if (type === 'success') p.className = 'log-success';
         terminal.appendChild(p);
         terminal.scrollTop = terminal.scrollHeight; // Auto-scroll al fondo
     }
@@ -254,7 +257,7 @@
     // Verificar si las librerías cargaron
     window.onload = function() {
         if (typeof mammoth === 'undefined') {
-            log('ERROR CRÍTICO: La librería Mammoth no cargó. Revisa tu conexión a internet o bloqueadores de anuncios.', 'error');
+            log('ERROR CRÍTICO: La librería Mammoth no cargó.', 'error');
         } else {
             log('Librería Mammoth.js cargada correctamente.');
         }
@@ -280,20 +283,24 @@
         };
 
         reader.onload = function(event) {
-            log('Archivo leído en memoria. Procesando extración de texto...');
+            log('Archivo leído en memoria. Procesando extracción de texto...');
             const arrayBuffer = event.target.result;
             
             try {
-                mammoth.convertToPlain({arrayBuffer: arrayBuffer})
+                // AQUI ESTÁ LA CORRECCIÓN CRÍTICA: extractRawText en lugar de convertToPlain
+                mammoth.extractRawText({arrayBuffer: arrayBuffer})
                     .then(function(result){
                         if (result.messages && result.messages.length > 0) {
                             result.messages.forEach(m => log(`Aviso Mammoth: ${m.message}`, 'warn'));
                         }
-                        log('Texto extraído exitosamente del Word.', 'info');
-                        analyzeText(result.value);
+                        log('¡Texto extraído exitosamente del Word!', 'success');
+                        
+                        // Limpiamos un poco el texto de saltos de línea basura que deja Word
+                        const cleanedText = result.value.replace(/(\r\n|\n|\r)+/gm, " ");
+                        analyzeText(cleanedText);
                     })
                     .catch(function(err){
-                        log(`ERROR en Mammoth: ${err.message}`, 'error');
+                        log(`ERROR en Mammoth al extraer texto: ${err.message}`, 'error');
                         log('SUGERENCIA: Usa la Opción 2 (Pegar Texto).', 'warn');
                     });
             } catch (error) {
@@ -317,7 +324,7 @@
         }
         log('Procesando texto ingresado manualmente...');
         resetUI();
-        analyzeText(text);
+        analyzeText(text.replace(/(\r\n|\n|\r)+/gm, " "));
     }
 
     function resetUI() {
@@ -346,7 +353,7 @@
             document.getElementById('kpi-words').innerText = `Palabras: ${wordCount}`;
             document.getElementById('kpi-sentences').innerText = `Oraciones: ${sentenceCount}`;
             
-            const connectors = ['además', 'en conclusión', 'por otro lado', 'no obstante', 'asimismo', 'es decir', 'sin embargo', 'por consiguiente'];
+            const connectors = ['además', 'en conclusión', 'por otro lado', 'no obstante', 'asimismo', 'es decir', 'sin embargo', 'por consiguiente', 'en resumen'];
             let connectorCount = 0;
             connectors.forEach(c => {
                 const regex = new RegExp('\\b' + c + '\\b', 'gi');
@@ -366,30 +373,30 @@
             let alertsFound = 0;
 
             if (variance < 15 && sentenceCount > 3) {
-                aiAlerts.innerHTML += `<div class="alert">🤖 <strong>Ritmo Monótono:</strong> Las oraciones tienen el mismo largo. Mezcla oraciones cortas y largas.</div>`;
+                aiAlerts.innerHTML += `<div class="alert">🤖 <strong>Ritmo Monótono:</strong> Las oraciones tienen el mismo largo. Mezcla oraciones cortas y largas para sonar más humano.</div>`;
                 alertsFound++;
             }
             if (connectorCount > (sentenceCount * 0.4)) {
-                aiAlerts.innerHTML += `<div class="alert">🤖 <strong>Exceso de Conectores:</strong> Usaste demasiados nexos formales. Habla más directo.</div>`;
+                aiAlerts.innerHTML += `<div class="alert">🤖 <strong>Exceso de Conectores:</strong> Usaste demasiados nexos formales. Intenta hablar más directo.</div>`;
                 alertsFound++;
             }
             
-            const cliches = ["en resumen", "es importante destacar", "cabe destacar", "para finalizar", "en este ensayo"];
+            const cliches = ["en resumen", "es importante destacar", "cabe destacar", "para finalizar", "en este ensayo", "es crucial entender"];
             cliches.forEach(cliche => {
                 if (text.toLowerCase().includes(cliche)) {
-                    aiAlerts.innerHTML += `<div class="alert">🚩 <strong>Muletilla Detectada:</strong> Evita la frase "${cliche}".</div>`;
+                    aiAlerts.innerHTML += `<div class="alert">🚩 <strong>Muletilla Detectada:</strong> Evita la frase "${cliche}", los detectores de IA y los profesores la marcan casi de inmediato.</div>`;
                     alertsFound++;
                 }
             });
 
             if (alertsFound === 0) {
-                aiAlerts.innerHTML = `<div class="success">✅ <strong>Excelente:</strong> El texto tiene fluidez y no abusa de muletillas de IA.</div>`;
-                document.getElementById('kpi-readability').innerText = `Legibilidad: Natural`;
+                aiAlerts.innerHTML = `<div class="success">✅ <strong>Excelente:</strong> El texto tiene fluidez y no abusa de patrones repetitivos ni muletillas de IA.</div>`;
+                document.getElementById('kpi-readability').innerText = `Legibilidad: Natural y Orgánica`;
             } else {
-                document.getElementById('kpi-readability').innerText = `Legibilidad: Sospechosa`;
+                document.getElementById('kpi-readability').innerText = `Legibilidad: Patrones Sospechosos`;
             }
 
-            log('Análisis finalizado. Generando interfaz...', 'success');
+            log('Análisis finalizado con éxito. Generando interfaz...', 'success');
             
             kpiBar.style.display = 'flex';
             dashboard.style.display = 'grid';
