@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analizador de Informes AIEP - Versión Estable</title>
+    <title>Analizador de Informes AIEP - Suite Completa</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -11,6 +11,7 @@
             --verde-primario: #2e7d32;
             --verde-claro: #e8f5e9;
             --verde-acento: #4caf50;
+            --verde-oscuro: #1b5e20;
             --texto: #2c3e50;
             --blanco: #ffffff;
             --gris-fondo: #f4f6f4;
@@ -64,10 +65,7 @@
 
         .upload-section:hover { background-color: #f1f8e9; }
 
-        .manual-input {
-            display: flex;
-            flex-direction: column;
-        }
+        .manual-input { display: flex; flex-direction: column; }
 
         textarea {
             width: 100%;
@@ -81,7 +79,6 @@
             margin-bottom: 10px;
         }
 
-        /* Consola de Diagnóstico */
         .terminal {
             background: #1e1e1e;
             color: #4caf50;
@@ -127,6 +124,28 @@
             border-radius: 8px;
         }
 
+        .api-panel {
+            background: #e3f2fd;
+            border-top: 4px solid #1976d2;
+            padding: 20px;
+            border-radius: 8px;
+            grid-column: 1 / -1;
+        }
+
+        .api-input-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .api-input-group input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #90caf9;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+
         .alert {
             color: #b71c1c;
             background: #ffcdd2;
@@ -138,13 +157,13 @@
         }
 
         .success {
-            color: #1b5e20;
+            color: var(--verde-oscuro);
             background: #c8e6c9;
             padding: 12px;
             border-radius: 5px;
             margin-bottom: 10px;
             font-size: 0.9em;
-            border-left: 4px solid #1b5e20;
+            border-left: 4px solid var(--verde-oscuro);
         }
 
         button {
@@ -160,7 +179,9 @@
             width: 100%;
         }
 
-        button:hover { background-color: #1b5e20; }
+        button:hover { background-color: var(--verde-oscuro); }
+        .btn-api { background-color: #1976d2; }
+        .btn-api:hover { background-color: #1565c0; }
 
         #text-preview {
             width: 100%;
@@ -174,11 +195,24 @@
             box-sizing: border-box;
         }
 
+        pre.json-response {
+            background: #282a36;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: monospace;
+            font-size: 0.85em;
+            max-height: 300px;
+            overflow-y: scroll;
+        }
+
         canvas { max-width: 100%; margin: 0 auto; display: block; }
 
         @media (max-width: 768px) {
             .input-grid { grid-template-columns: 1fr; }
             .kpi-bar { flex-direction: column; align-items: center; gap: 10px; }
+            .api-input-group { flex-direction: column; }
         }
     </style>
 </head>
@@ -187,7 +221,7 @@
 <div class="container">
     <header>
         <h1>Analizador de Informes AIEP</h1>
-        <p>Herramienta Avanzada de Auditoría de Texto</p>
+        <p>Auditoría de IA y Escáner Web Anti-Plagio</p>
     </header>
 
     <div class="input-grid">
@@ -199,7 +233,7 @@
 
         <div class="manual-input">
             <h3 style="margin-top: 0; margin-bottom: 5px; text-align: center; color: var(--verde-primario);">📝 Opción 2: Pegar Texto</h3>
-            <textarea id="manual-text" placeholder="Si subir el archivo falla, pega tu informe directamente aquí..."></textarea>
+            <textarea id="manual-text" placeholder="Pega tu informe directamente aquí..."></textarea>
             <button onclick="processManualText()">Analizar Texto Pegado</button>
         </div>
     </div>
@@ -215,14 +249,24 @@
     </div>
 
     <div class="dashboard" id="dashboard">
+        <div class="api-panel">
+            <h3 style="margin-top: 0; color: #0d47a1;">🌐 Escáner Web Anti-Plagio (En Vivo)</h3>
+            <p style="font-size: 0.9em; margin-bottom: 5px;">Ingresa tu clave de RapidAPI para consultar bases de datos reales:</p>
+            <div class="api-input-group">
+                <input type="password" id="api-key" placeholder="Pega tu API Key de RapidAPI aquí...">
+                <button class="btn-api" id="btn-scan" onclick="checkWebPlagiarism()" style="width: auto;">Escanear la Web</button>
+            </div>
+            <div id="plagiarism-results" style="margin-top: 15px; font-size: 0.9em;"></div>
+        </div>
+
         <div class="card">
-            <h3 style="text-align: center;">Métrica de Variabilidad</h3>
+            <h3 style="text-align: center;">Métrica de Variabilidad (IA Local)</h3>
             <canvas id="chartHumanity"></canvas>
             <div id="humanity-feedback" style="text-align: center; margin-top: 15px;"></div>
         </div>
 
         <div class="card">
-            <h3>Diagnóstico de Estructura</h3>
+            <h3>Diagnóstico de Estructura IA</h3>
             <div id="ai-alerts"></div>
         </div>
 
@@ -242,8 +286,8 @@
     const terminal = document.getElementById('terminal');
     
     let chartInstance = null;
+    let globalTextToAnalyze = ""; 
 
-    // Función de log para la consola en pantalla
     function log(msg, type = 'info') {
         const p = document.createElement('p');
         p.textContent = `> ${msg}`;
@@ -251,78 +295,35 @@
         if (type === 'warn') p.className = 'log-warn';
         if (type === 'success') p.className = 'log-success';
         terminal.appendChild(p);
-        terminal.scrollTop = terminal.scrollHeight; // Auto-scroll al fondo
+        terminal.scrollTop = terminal.scrollHeight;
     }
 
-    // Verificar si las librerías cargaron
-    window.onload = function() {
-        if (typeof mammoth === 'undefined') {
-            log('ERROR CRÍTICO: La librería Mammoth no cargó.', 'error');
-        } else {
-            log('Librería Mammoth.js cargada correctamente.');
-        }
-        if (typeof Chart === 'undefined') {
-            log('ERROR CRÍTICO: La librería Chart.js no cargó.', 'error');
-        } else {
-            log('Librería Chart.js cargada correctamente.');
-        }
-    };
-
-    // Procesamiento de archivo Word
     fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
 
-        log(`Iniciando lectura del archivo: ${file.name} (${Math.round(file.size / 1024)} KB)`);
+        log(`Iniciando lectura del archivo: ${file.name}`);
         resetUI();
 
         const reader = new FileReader();
-        
-        reader.onerror = function() {
-            log('ERROR: Tu navegador bloqueó la lectura del archivo.', 'error');
-        };
-
         reader.onload = function(event) {
-            log('Archivo leído en memoria. Procesando extracción de texto...');
             const arrayBuffer = event.target.result;
-            
             try {
-                // AQUI ESTÁ LA CORRECCIÓN CRÍTICA: extractRawText en lugar de convertToPlain
                 mammoth.extractRawText({arrayBuffer: arrayBuffer})
                     .then(function(result){
-                        if (result.messages && result.messages.length > 0) {
-                            result.messages.forEach(m => log(`Aviso Mammoth: ${m.message}`, 'warn'));
-                        }
                         log('¡Texto extraído exitosamente del Word!', 'success');
-                        
-                        // Limpiamos un poco el texto de saltos de línea basura que deja Word
                         const cleanedText = result.value.replace(/(\r\n|\n|\r)+/gm, " ");
                         analyzeText(cleanedText);
                     })
-                    .catch(function(err){
-                        log(`ERROR en Mammoth al extraer texto: ${err.message}`, 'error');
-                        log('SUGERENCIA: Usa la Opción 2 (Pegar Texto).', 'warn');
-                    });
-            } catch (error) {
-                log(`Excepción no controlada: ${error.message}`, 'error');
-            }
+                    .catch(function(err){ log(`ERROR en Mammoth: ${err.message}`, 'error'); });
+            } catch (error) { log(`Excepción: ${error.message}`, 'error'); }
         };
-        
-        try {
-            reader.readAsArrayBuffer(file);
-        } catch (error) {
-            log(`Error al intentar usar FileReader: ${error.message}`, 'error');
-        }
+        reader.readAsArrayBuffer(file);
     });
 
-    // Procesamiento Manual (Plan B)
     function processManualText() {
         const text = document.getElementById('manual-text').value;
-        if (!text || text.trim() === '') {
-            log('ERROR: La caja de texto está vacía.', 'error');
-            return;
-        }
-        log('Procesando texto ingresado manualmente...');
+        if (!text || text.trim() === '') { log('ERROR: Caja vacía.', 'error'); return; }
         resetUI();
         analyzeText(text.replace(/(\r\n|\n|\r)+/gm, " "));
     }
@@ -330,88 +331,64 @@
     function resetUI() {
         dashboard.style.display = 'none';
         kpiBar.style.display = 'none';
-        if (chartInstance) {
-            chartInstance.destroy();
-            chartInstance = null;
-        }
+        document.getElementById('plagiarism-results').innerHTML = "";
+        if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
     }
 
     function analyzeText(rawText) {
-        log('Iniciando algoritmos de análisis KPI...');
+        log('Iniciando algoritmos locales de análisis de estructura...');
         const text = rawText.trim();
+        globalTextToAnalyze = text; 
         
-        if (text.length < 50) {
-            log('ERROR: El texto es demasiado corto para analizar (mínimo 50 caracteres).', 'error');
-            return;
+        if (text.length < 50) { log('ERROR: Texto muy corto.', 'error'); return; }
+
+        const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
+        const sentences = text.split(/([.?!])\s*(?=[A-Z])/g).filter(s => s.trim().length > 1);
+        const sentenceCount = sentences.length > 0 ? sentences.length : 1;
+
+        document.getElementById('kpi-words').innerText = `Palabras: ${wordCount}`;
+        document.getElementById('kpi-sentences').innerText = `Oraciones: ${sentenceCount}`;
+        
+        const connectors = ['además', 'en conclusión', 'por otro lado', 'no obstante', 'asimismo', 'es decir', 'sin embargo', 'por consiguiente', 'en resumen'];
+        let connectorCount = 0;
+        connectors.forEach(c => {
+            const matches = text.match(new RegExp('\\b' + c + '\\b', 'gi'));
+            if(matches) connectorCount += matches.length;
+        });
+
+        const lengths = sentences.map(s => s.split(/\s+/).length);
+        const averageLength = lengths.reduce((a, b) => a + b, 0) / sentenceCount;
+        
+        let variance = 0;
+        if (sentenceCount > 1) variance = lengths.reduce((a, b) => a + Math.pow(b - averageLength, 2), 0) / sentenceCount;
+
+        aiAlerts.innerHTML = "";
+        let alertsFound = 0;
+
+        if (variance < 15 && sentenceCount > 3) { aiAlerts.innerHTML += `<div class="alert">🤖 <strong>Ritmo Monótono:</strong> Mezcla oraciones cortas y largas.</div>`; alertsFound++; }
+        if (connectorCount > (sentenceCount * 0.4)) { aiAlerts.innerHTML += `<div class="alert">🤖 <strong>Exceso de Conectores:</strong> Usaste demasiados nexos formales.</div>`; alertsFound++; }
+        
+        const cliches = ["en resumen", "es importante destacar", "cabe destacar", "para finalizar", "en este ensayo"];
+        cliches.forEach(cliche => {
+            if (text.toLowerCase().includes(cliche)) { aiAlerts.innerHTML += `<div class="alert">🚩 <strong>Muletilla IA:</strong> Evita la frase "${cliche}".</div>`; alertsFound++; }
+        });
+
+        if (alertsFound === 0) {
+            aiAlerts.innerHTML = `<div class="success">✅ <strong>Excelente:</strong> Texto orgánico.</div>`;
+            document.getElementById('kpi-readability').innerText = `Legibilidad: Natural`;
+        } else {
+            document.getElementById('kpi-readability').innerText = `Legibilidad: Sospechosa`;
         }
 
-        try {
-            const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
-            const sentences = text.split(/([.?!])\s*(?=[A-Z])/g).filter(s => s.trim().length > 1);
-            const sentenceCount = sentences.length > 0 ? sentences.length : 1;
-
-            document.getElementById('kpi-words').innerText = `Palabras: ${wordCount}`;
-            document.getElementById('kpi-sentences').innerText = `Oraciones: ${sentenceCount}`;
-            
-            const connectors = ['además', 'en conclusión', 'por otro lado', 'no obstante', 'asimismo', 'es decir', 'sin embargo', 'por consiguiente', 'en resumen'];
-            let connectorCount = 0;
-            connectors.forEach(c => {
-                const regex = new RegExp('\\b' + c + '\\b', 'gi');
-                const matches = text.match(regex);
-                if(matches) connectorCount += matches.length;
-            });
-
-            const lengths = sentences.map(s => s.split(/\s+/).length);
-            const averageLength = lengths.reduce((a, b) => a + b, 0) / sentenceCount;
-            
-            let variance = 0;
-            if (sentenceCount > 1) {
-                variance = lengths.reduce((a, b) => a + Math.pow(b - averageLength, 2), 0) / sentenceCount;
-            }
-
-            aiAlerts.innerHTML = "";
-            let alertsFound = 0;
-
-            if (variance < 15 && sentenceCount > 3) {
-                aiAlerts.innerHTML += `<div class="alert">🤖 <strong>Ritmo Monótono:</strong> Las oraciones tienen el mismo largo. Mezcla oraciones cortas y largas para sonar más humano.</div>`;
-                alertsFound++;
-            }
-            if (connectorCount > (sentenceCount * 0.4)) {
-                aiAlerts.innerHTML += `<div class="alert">🤖 <strong>Exceso de Conectores:</strong> Usaste demasiados nexos formales. Intenta hablar más directo.</div>`;
-                alertsFound++;
-            }
-            
-            const cliches = ["en resumen", "es importante destacar", "cabe destacar", "para finalizar", "en este ensayo", "es crucial entender"];
-            cliches.forEach(cliche => {
-                if (text.toLowerCase().includes(cliche)) {
-                    aiAlerts.innerHTML += `<div class="alert">🚩 <strong>Muletilla Detectada:</strong> Evita la frase "${cliche}", los detectores de IA y los profesores la marcan casi de inmediato.</div>`;
-                    alertsFound++;
-                }
-            });
-
-            if (alertsFound === 0) {
-                aiAlerts.innerHTML = `<div class="success">✅ <strong>Excelente:</strong> El texto tiene fluidez y no abusa de patrones repetitivos ni muletillas de IA.</div>`;
-                document.getElementById('kpi-readability').innerText = `Legibilidad: Natural y Orgánica`;
-            } else {
-                document.getElementById('kpi-readability').innerText = `Legibilidad: Patrones Sospechosos`;
-            }
-
-            log('Análisis finalizado con éxito. Generando interfaz...', 'success');
-            
-            kpiBar.style.display = 'flex';
-            dashboard.style.display = 'grid';
-            
-            renderChart(variance, alertsFound);
-            textPreview.innerText = text;
-            
-        } catch (error) {
-            log(`Error durante el análisis matemático: ${error.message}`, 'error');
-        }
+        kpiBar.style.display = 'flex';
+        dashboard.style.display = 'grid';
+        renderChart(variance, alertsFound);
+        textPreview.innerText = text;
+        log('Análisis local de estructura finalizado.', 'success');
     }
 
     function renderChart(variance, alertsFound) {
         const ctx = document.getElementById('chartHumanity').getContext('2d');
-        
         let baseScore = Math.min(100, (variance * 2.5));
         let finalScore = Math.max(0, baseScore - (alertsFound * 15)); 
         if (isNaN(finalScore)) finalScore = 50; 
@@ -419,17 +396,83 @@
         chartInstance = new Chart(ctx, {
             type: 'doughnut',
             data: {
-                labels: ['Organico/Humano', 'Patrón Sospechoso'],
-                datasets: [{
-                    data: [finalScore, 100 - finalScore],
-                    backgroundColor: ['#4caf50', '#e53935'],
-                    borderWidth: 0
-                }]
+                labels: ['Organico', 'Patrón IA'],
+                datasets: [{ data: [finalScore, 100 - finalScore], backgroundColor: ['#4caf50', '#e53935'], borderWidth: 0 }]
             },
             options: { cutout: '75%', plugins: { legend: { position: 'bottom' } } }
         });
-        
         document.getElementById('humanity-feedback').innerHTML = `<h3>${finalScore.toFixed(0)}%</h3><span>Índice de Naturalidad</span>`;
+    }
+
+    // ==========================================
+    // ESCÁNER WEB DE PLAGIO (INTEGRACIÓN REAL)
+    // ==========================================
+    async function checkWebPlagiarism() {
+        const apiKey = document.getElementById('api-key').value.trim();
+        const resultsDiv = document.getElementById('plagiarism-results');
+        const btnScan = document.getElementById('btn-scan');
+
+        if (!apiKey) {
+            alert("Por favor, ingresa tu API Key de RapidAPI en la cajita azul.");
+            return;
+        }
+
+        if (globalTextToAnalyze.length < 100) {
+            alert("El texto es muy corto. Necesitas al menos 100 caracteres para buscar en la web.");
+            return;
+        }
+
+        // Estado de carga
+        btnScan.disabled = true;
+        btnScan.innerText = "Escaneando...";
+        resultsDiv.innerHTML = "⏳ Conectando con los servidores y escaneando la web... Por favor, espera.";
+        log('Enviando solicitud POST a la API de RapidAPI...');
+
+        // Datos extraídos de tu código Java
+        const url = 'https://plagiarism-checker-and-auto-citation-generator-multi-lingual.p.rapidapi.com/plagiarism';
+        
+        const options = {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                'X-RapidAPI-Key': apiKey, 
+                'X-RapidAPI-Host': 'plagiarism-checker-and-auto-citation-generator-multi-lingual.p.rapidapi.com'
+            },
+            // Estructura exacta que pide tu API, configurada en Español ("es")
+            body: JSON.stringify({ 
+                text: globalTextToAnalyze.substring(0, 3000), 
+                language: 'es',
+                includeCitations: false,
+                scrapeSources: false
+            })
+        };
+
+        try {
+            // Llamada real al servidor
+            const response = await fetch(url, options);
+            const data = await response.json();
+            
+            // Si la API arroja un error interno por cuota o formato
+            if (!response.ok) {
+                throw new Error(data.message || 'Error en la respuesta de la API');
+            }
+            
+            // Imprimimos el resultado crudo en pantalla
+            resultsDiv.innerHTML = `
+                <div class="success">✅ Escaneo web finalizado. El servidor ha respondido con los siguientes datos:</div>
+                <pre class="json-response">${JSON.stringify(data, null, 2)}</pre>
+            `;
+            log('Datos de plagio recibidos correctamente.', 'success');
+
+        } catch (error) {
+            console.error(error);
+            resultsDiv.innerHTML = `<div class="alert">❌ Error de conexión: ${error.message}. Verifica tu Key o tus límites de uso.</div>`;
+            log(`Fallo de API: ${error.message}`, 'error');
+        } finally {
+            // Restaurar botón
+            btnScan.disabled = false;
+            btnScan.innerText = "Escanear la Web";
+        }
     }
 </script>
 
